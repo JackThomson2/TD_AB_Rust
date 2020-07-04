@@ -1,8 +1,8 @@
 use dashmap::DashMap;
 
 pub const EXACT_FLAG: u8 = 0;
-pub const UPPER_FLAG: u8 = 0;
-pub const LOWER_FLAG: u8 = 0;
+pub const UPPER_FLAG: u8 = 1;
+pub const LOWER_FLAG: u8 = 2;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TBEntry {
