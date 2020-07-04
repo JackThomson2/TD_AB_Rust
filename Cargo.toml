@@ -12,7 +12,7 @@ fastrand = "1.3.2"
 snmalloc-rs = { version = "0.2", features=["native-cpu", "cache-friendly"] }
 rayon = { git = "https://github.com/nikomatsakis/rayon", branch = "latch-target-thread-2" }
 smallvec = { version = "1.4", features = ["union"] }
-
+seahash = "4.0.1"
 
 [profile.release]
 panic = "abort"

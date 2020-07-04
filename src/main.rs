@@ -29,6 +29,7 @@ fn main() {
         let moving = solver::compute(&game, 12);
 
         println!("Best move is {} with a score of {}", moving.0, moving.1);
+        println!("Board hash is {}", game.hash_me());
 
         unsafe {
             game.step(*moving.0);

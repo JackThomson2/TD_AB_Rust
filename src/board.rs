@@ -1,6 +1,8 @@
 use crate::constants::*;
 use crate::helper::{get_lever_string, get_new_board};
 
+use seahash::*;
+
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Copy, Clone, Debug)]
@@ -35,13 +37,27 @@ impl TDGame {
     pub fn has_parity(&self) -> bool {
         let mut testing = self.state;
         testing ^= testing >> 4;
-        testing &= 15;
-        (-(0x6996 >> testing) & 1) == 1
+        testing &= 0b1111;
+        (-(0b110100101101001 >> testing) & 1) == 1
     }
 
     #[inline]
     pub fn game_over(&self) -> bool {
         (self.state & GAME_OVER) == 4
+    }
+
+    #[inline]
+    pub fn hash_me(&self) -> u64 {
+        let mut bytes: [u8; 18] = [0; 18];
+        bytes[0..8].copy_from_slice(&self.state.to_be_bytes());
+        bytes[8..10].copy_from_slice(&self.round_scores[0].to_be_bytes());
+        bytes[10..12].copy_from_slice(&self.round_scores[1].to_be_bytes());
+        bytes[12..14].copy_from_slice(&self.player_1_score.to_be_bytes());
+        bytes[14..16].copy_from_slice(&self.player_2_score.to_be_bytes());
+        bytes[16] = self.next_round as u8;
+        bytes[17] = self.turn;
+
+        hash(&bytes)
     }
 
     pub fn render(&self) {
@@ -146,10 +162,6 @@ impl TDGame {
         self.state ^= RIGHT_PLAYER;
 
         score
-    }
-
-    pub unsafe fn hash_me(&self) -> u64 {
-        0
     }
 
     #[inline]
