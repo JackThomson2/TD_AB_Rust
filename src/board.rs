@@ -47,7 +47,7 @@ impl TDGame {
     }
 
     #[inline]
-    pub fn hash_me(&self) -> u64 {
+    pub fn get_board_bytes(&self) -> [u8; 18] {
         let mut bytes: [u8; 18] = [0; 18];
         bytes[0..8].copy_from_slice(&self.state.to_be_bytes());
         bytes[8..10].copy_from_slice(&self.round_scores[0].to_be_bytes());
@@ -55,9 +55,14 @@ impl TDGame {
         bytes[12..14].copy_from_slice(&self.player_1_score.to_be_bytes());
         bytes[14..16].copy_from_slice(&self.player_2_score.to_be_bytes());
         bytes[16] = self.next_round as u8;
-        bytes[17] = self.turn;
+        // bytes[17] = self.turn;
 
-        hash(&bytes)
+        bytes
+    }
+
+    #[inline]
+    pub fn hash_me(&self) -> u64 {
+        hash(&self.get_board_bytes())
     }
 
     pub fn render(&self) {

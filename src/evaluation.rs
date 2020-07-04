@@ -9,9 +9,9 @@ pub fn get_scoring(board: &TDGame, left_player: bool) -> i32 {
     };
 
     if board.has_parity() {
-        score_different -= 10;
+        score_different -= 2;
     } else {
-        score_different += 10;
+        score_different += 2;
     }
 
     score_different

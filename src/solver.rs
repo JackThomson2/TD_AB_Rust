@@ -1,5 +1,8 @@
 use crate::board::*;
 use crate::evaluation::get_scoring;
+use crate::hash_table::*;
+
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use atomic_counter::AtomicCounter;
 use rayon::prelude::*;
@@ -10,75 +13,136 @@ use std::time::Instant;
 
 const POSSIBE_MOVES: [u8; 8] = [0, 7, 1, 6, 2, 5, 3, 4];
 
-pub fn compute(board: &TDGame, depth: u8) -> (&u8, i32) {
+pub fn compute(board: &TDGame, depth: u8) -> (u8, i32) {
+    let hash_table: HashTable = dashmap::DashMap::with_capacity(40_000_000);
+
     let now = Instant::now();
     let cntr = Arc::new(atomic_counter::RelaxedCounter::new(0));
-    let best = POSSIBE_MOVES
-        .par_iter()
-        .map(|moving| {
-            (
-                moving,
-                make_move(board, depth - 1, *moving, i32::MIN, i32::MAX, &cntr),
-            )
-        })
-        .max_by(|x, y| x.1.cmp(&y.1))
-        .unwrap();
+    let hash_hits = Arc::new(atomic_counter::RelaxedCounter::new(0));
+
+    let mut best_score = i32::MIN;
+    let mut best_move: u8 = 0;
+
+    let mut alpha = -999999;
+    let beta = 999999;
+
+    // Synchronous at the top performs better?
+    for moves in POSSIBE_MOVES.iter() {
+        let mut brd_copy = *board;
+        unsafe { brd_copy.step(*moves) };
+
+        let score = -nega_max(
+            &brd_copy,
+            depth - 1,
+            beta * -1,
+            alpha * -1,
+            &cntr,
+            &hash_hits,
+            &hash_table,
+        );
+
+        if score > best_score {
+            best_score = score;
+            best_move = *moves;
+            alpha = score;
+        }
+    }
 
     println!(
-        "Took {:?}, Searched {} positions",
+        "Took {:?}, Move is {} with score {}.\n Searched {} positions, with {} hashhits, table size is {}",
         now.elapsed(),
-        cntr.get()
+        best_move,
+        best_score,
+        cntr.get(),
+        hash_hits.get(),
+        hash_table.len()
     );
 
-    best
+    (best_move, best_score)
 }
 
-fn make_move(
+#[inline]
+fn nega_max(
     board: &TDGame,
     depth: u8,
-    move_to: u8,
     alpha: i32,
     beta: i32,
     cntr: &atomic_counter::RelaxedCounter,
+    hash_hits: &atomic_counter::RelaxedCounter,
+    hash_table: &HashTable,
 ) -> i32 {
-    let mut copied = *board;
-    cntr.inc();
-
-    let mut alpha = alpha;
-
-    if copied.game_over() {
-        return -111;
-    }
-
-    let is_left = copied.is_left_player();
-    let _score = unsafe { copied.step(move_to) };
-
-    if copied.game_over() {
-        return i32::MAX;
-    }
-
     if depth == 0 {
-        return get_scoring(&copied, is_left);
+        cntr.inc();
+        let is_left = board.is_left_player();
+        return get_scoring(board, is_left);
     }
 
-    let mut best_score = i32::MIN;
+    let alpha_orig = alpha;
+    let mut new_alpha = alpha;
+    let mut beta = beta;
 
-    for mv in POSSIBE_MOVES.iter() {
-        let res = if depth > 5 {
-            rayon::scope(|_| -make_move(&copied, depth - 1, *mv, -beta, -alpha, cntr))
+    let hash = board.hash_me();
+
+    if let Some(found) = hash_table.get(&hash) {
+        if found.depth >= depth {
+            hash_hits.inc();
+            if found.flag == EXACT_FLAG {
+                return found.score;
+            } else if found.flag == LOWER_FLAG {
+                new_alpha = max(new_alpha, found.score);
+            } else if found.flag == UPPER_FLAG {
+                beta = min(beta, found.score);
+            }
+
+            if new_alpha >= beta {
+                return found.score;
+            }
+        }
+    }
+
+    let alpha = AtomicI32::new(new_alpha);
+    let best_move = AtomicI32::new(-9999);
+
+    let loop_fun = |moving: &u8| {
+        if beta < alpha.load(Ordering::SeqCst) {
+            return;
+        }
+        let mut new_board = *board;
+        unsafe { new_board.step(*moving) };
+        let score = -nega_max(
+            &new_board,
+            depth - 1,
+            -beta,
+            -alpha.load(Ordering::SeqCst),
+            cntr,
+            hash_hits,
+            hash_table,
+        );
+
+        best_move.fetch_max(score, Ordering::Relaxed);
+        alpha.fetch_max(score, Ordering::Relaxed);
+    };
+
+    if depth > 4 {
+        POSSIBE_MOVES.par_iter().for_each(loop_fun);
+    } else {
+        POSSIBE_MOVES.iter().for_each(loop_fun);
+    }
+    let final_score = best_move.load(Ordering::SeqCst);
+
+    let entry = TBEntry {
+        depth,
+        score: final_score,
+        flag: if final_score <= alpha_orig {
+            UPPER_FLAG
+        } else if final_score >= beta {
+            LOWER_FLAG
         } else {
-            -make_move(&copied, depth - 1, *mv, -beta, -alpha, cntr)
-        };
+            EXACT_FLAG
+        },
+    };
 
-        if res > best_score {
-            best_score = res;
-        }
+    hash_table.insert(hash, entry);
 
-        alpha = max(alpha, best_score);
-        if alpha >= beta {
-            break;
-        }
-    }
-
-    return best_score;
+    final_score
 }

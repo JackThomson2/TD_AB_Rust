@@ -13,6 +13,7 @@ snmalloc-rs = { version = "0.2", features=["native-cpu", "cache-friendly"] }
 rayon = { git = "https://github.com/nikomatsakis/rayon", branch = "latch-target-thread-2" }
 smallvec = { version = "1.4", features = ["union"] }
 seahash = "4.0.1"
+dashmap = "4.0.0-rc5"
 
 [profile.release]
 panic = "abort"
