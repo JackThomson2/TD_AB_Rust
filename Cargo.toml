@@ -8,3 +8,10 @@ edition = "2018"
 
 [dependencies]
 fastrand = "1.3.2"
+snmalloc-rs = { version = "0.2", features=["native-cpu", "cache-friendly"] }
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+codegen-units = 1
+lto = "fat"
