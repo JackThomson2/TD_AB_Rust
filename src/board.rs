@@ -1,15 +1,16 @@
 use crate::constants::*;
 use crate::helper::{get_lever_string, get_new_board};
 
+use smallvec::{smallvec, SmallVec};
+
 #[derive(Copy, Clone, Debug)]
 pub struct TDGame {
     pub state: u64,
-    pub round_scores: [u32; 2],
-    pub just_scored: u32,
-    pub player_1_score: u32,
-    pub player_2_score: u32,
+    pub round_scores: [u16; 2],
+    pub player_1_score: u16,
+    pub player_2_score: u16,
     pub next_round: bool,
-    pub turn: u32,
+    pub turn: u8,
 }
 
 impl TDGame {
@@ -19,8 +20,8 @@ impl TDGame {
 
     pub fn make_avified_board(inp: &str) -> u64 {
         let mut output = 0 << 32;
-
         let mut cntr = 0;
+
         for pce in inp.chars() {
             if pce != '\\' {
                 output |= RIGHT_PLAYER << (cntr * 2 + 2);
@@ -28,6 +29,14 @@ impl TDGame {
             cntr += 1
         }
         output
+    }
+
+    #[inline]
+    pub fn has_parity(&self) -> bool {
+        let mut testing = self.state;
+        testing ^= testing >> 4;
+        testing &= 15;
+        (-(0x6996 >> testing) & 1) == 1
     }
 
     #[inline]
@@ -65,18 +74,24 @@ impl TDGame {
     }
 
     #[inline]
-    pub unsafe fn step(&mut self, location: u8) {
+    pub fn is_left_player(&self) -> bool {
+        self.state & RIGHT_PLAYER != 8
+    }
+
+    #[inline]
+    pub unsafe fn step(&mut self, location: u8) -> i32 {
         if self.game_over() {
-            return;
+            return -1;
         }
 
+        let mut score: i32 = 0;
         let mut coins: [u8; 78] = [0; 78];
         coins[location as usize] = 1;
 
-        let player_num: usize = if self.state & RIGHT_PLAYER != 8 { 0 } else { 1 };
+        let player_num: usize = if self.is_left_player() { 0 } else { 1 };
         let row = ROUND_WEIGHTS.get_unchecked((self.state & (CURR_ROUND)) as usize);
 
-        let mut tracked_coins: Vec<(u8, u8)> = vec![get_u8_pos(location as usize)];
+        let mut tracked_coins: SmallVec<[(u8, u8); 20]> = smallvec![get_u8_pos(location as usize)];
 
         while !tracked_coins.is_empty() {
             let mut next_coins: [u8; 78] = [0; 78];
@@ -96,9 +111,9 @@ impl TDGame {
             for (k, weight) in row.iter().enumerate() {
                 let scored_2: u16 = next_coins[76 - k] as u16 * weight;
                 let scored: u16 = next_coins[61 + k] as u16 * weight;
-                let total = (scored + scored_2) as u32;
+                let total = scored + scored_2;
 
-                self.just_scored += total;
+                score += total as i32;
                 self.round_scores[player_num] += total;
 
                 if player_num == 0 {
@@ -129,24 +144,12 @@ impl TDGame {
 
         self.turn += 1;
         self.state ^= RIGHT_PLAYER;
+
+        score
     }
 
     pub unsafe fn hash_me(&self) -> u64 {
-        let mut a: u64 = if self.next_round {
-            self.state | RIGHT_PLAYER
-        } else {
-            self.state & !RIGHT_PLAYER
-        };
-
-        let mut l: u32 = self.round_scores[0];
-        l <<= 16;
-        l |= self.round_scores.get_unchecked(1) & 0xffff;
-        l <<= 16;
-        l |= self.just_scored & 0xffff;
-        a = 0xbf58_476d_1ce4_e5b9_u64.wrapping_mul(a ^ (a >> 30));
-        a = 0x94d0_49bb_1331_11eb_u64.wrapping_mul(a ^ (a >> 27));
-        a = a ^ (a >> 31);
-        a ^ l as u64
+        0
     }
 
     #[inline]

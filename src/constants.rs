@@ -19,4 +19,4 @@ pub const GAME_OVER: u64 = 0b100;
 pub const CURR_ROUND: u64 = 0b11;
 pub const ONE: u64 = 0b1;
 
-pub const ROUND_TARGETS: [u32; 4] = [10, 40, 20, 80];
+pub const ROUND_TARGETS: [u16; 4] = [10, 40, 20, 80];

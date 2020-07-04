@@ -12,7 +12,6 @@ pub fn get_new_board(_play_holes: bool) -> TDGame {
     TDGame {
         state: board,
         round_scores: [0, 0],
-        just_scored: 0,
         player_1_score: 0,
         player_2_score: 0,
         next_round: false,
